@@ -1,0 +1,271 @@
+-- Описание данных
+
+-- Таблицы:
+--analytics_events — журнал аналитических событий.
+--advertisement_budgets — рекламные затраты по дням и каналам привлечения.
+--partners — справочник партнёрских сетей и их ресторанов.
+--dishes — справочник блюд.
+--cities — справочник городов.
+
+--Таблица analytics_events
+--В таблице хранятся данные о событиях в период с 30.04.2021 по 02.07.2021.
+
+--visitor_uuid — идентификатор посетителя.
+--user_id — идентификатор зарегистрированного пользователя. Присваивается посетителю после создания учётной записи: ввода логина, пароля, адреса доставки и ------контактных данных.
+--device_type — тип платформы, с которой посетитель зашёл в продукт.
+--city_id — город, из которого посетитель зашёл в сервис.
+--age — возрастная группа пользователя. Она указывается при регистрации.
+--source — рекламный источник привлечения посетителя.
+--first_date — дата первого посещения продукта.
+--visit_id — уникальный идентификатор сессии.
+--event — название аналитического события.
+--datetime — дата и время события.
+--log_date — дата события.
+--rest_id — уникальный идентификатор сети, к которой принадлежит ресторан. Заполняется для заказов, карточек ресторанов и блюд.
+--object_id — уникальный идентификатор блюда. Заполняется для заказов и карточек блюд.
+--listing_id — уникальный идентификатор блюда в листинге. Заполняется только для событий rest_page.
+--position — позиция блюда в листинге. Чем меньше номер, тем ближе блюдо к началу страницы. Заполняется только для событий rest_page.
+--order_id — уникальный идентификатор заказа.
+--revenue — выручка от заказа в рублях. Это та сумма, которую пользователь видит при оплате.
+--delivery — стоимость доставки в рублях.
+--commission — комиссия, которую сервис берёт с выручки ресторана.
+
+--В поле event таблицы также хранятся данные о нескольких типах аналитических событий:
+--main_page — посещение главной страницы приложения.
+--authorization — ввод логина и пароля, авторизация.
+--rest_page — просмотр страницы ресторана.
+--object_page — просмотр карточки блюда.
+--order — оплата заказа.
+
+--Таблица advertisement_budgets
+
+--source — рекламный источник.
+--date — дата рекламных затрат.
+--budget — дневной бюджет в рублях.
+
+--Таблица partners
+
+--rest_id — уникальный идентификатор сети, к которой принадлежит ресторан (одна сеть может быть представлена в нескольких городах).
+--chain — название сети, к которой принадлежит ресторан.
+--type — тип кухни.
+--city_id — город, в котором находится ресторан.
+--commission — комиссия в процентах, которую «Всё.из.кафе» берёт с выручки ресторана.
+
+--Таблица dishes
+
+--object_id — уникальный идентификатор блюда.
+--name — название блюда.
+--spicy — логический признак острых блюд. 1 — блюдо острое.
+--fish — логический признак рыбных блюд. 1 — блюдо содержит морепродукты.
+--meat — логический признак мясных блюд. 1 — блюдо содержит мясо.
+--rest_id — уникальный идентификатор ресторана, из которого можно заказать блюдо.
+
+--Таблица cities
+
+--city_id — уникальный идентификатор населённого пункта.
+--city_name — название населённого пункта.
+
+
+-- 1. Расчёт DAU
+
+SELECT
+    log_date,
+    COUNT(DISTINCT user_id) AS DAU
+FROM analytics_events AS a 
+LEFT JOIN cities AS c USING(city_id)
+WHERE a.log_date BETWEEN '2021-05-01' AND '2021-06-30' 
+    AND c.city_name = 'Саранск'
+    AND a.order_id IS NOT NULL
+GROUP BY log_date
+ORDER BY log_date;
+
+--2. Расчёт Conversion Rate
+
+SELECT
+    log_date,
+    ROUND((COUNT(DISTINCT user_id) filter (WHERE a.order_id IS NOT NULL))/COUNT(DISTINCT user_id)::numeric,2) AS CR
+FROM analytics_events AS a 
+LEFT JOIN cities AS c USING(city_id)
+WHERE a.log_date BETWEEN '2021-05-01' AND '2021-06-30' 
+    AND c.city_name = 'Саранск'
+GROUP BY log_date
+ORDER BY log_date;
+
+--3. Расчет среднего чека
+
+-- Рассчитываем величину комиссии с каждого заказа, отбираем заказы по дате и городу
+WITH orders AS (
+    SELECT 
+        *,
+        revenue * commission AS commission_revenue
+    FROM analytics_events
+    JOIN cities ON analytics_events.city_id = cities.city_id
+    WHERE revenue IS NOT NULL
+        AND log_date BETWEEN '2021-05-01' AND '2021-06-30'
+        AND city_name = 'Саранск'
+)
+
+SELECT 
+    CAST(DATE_TRUNC('month', log_date) AS date) AS "Месяц",
+    COUNT(DISTINCT order_id) AS "Количество заказов",
+    ROUND(SUM(commission_revenue)::numeric, 2) AS "Сумма комиссии",
+    ROUND((SUM(commission_revenue)/COUNT(DISTINCT order_id))::numeric, 2) AS "Средний чек"
+FROM orders
+GROUP BY "Месяц"
+ORDER BY "Месяц"
+
+-- 4. Расчёт LTV ресторанов
+
+-- Рассчитываем величину комиссии с каждого заказа, отбираем заказы по дате и городу
+WITH orders AS (
+    SELECT 
+        analytics_events.rest_id,
+        analytics_events.city_id,
+        revenue * commission AS commission_revenue
+    FROM analytics_events
+    JOIN cities ON analytics_events.city_id = cities.city_id
+    WHERE revenue IS NOT NULL
+        AND log_date BETWEEN '2021-05-01' AND '2021-06-30'
+        AND city_name = 'Саранск'
+)
+
+SELECT 
+    o.rest_id,
+    p.chain AS "Название сети",
+    p.type AS "Тип кухни",
+    ROUND(SUM(commission_revenue)::numeric, 2) AS LTV
+FROM orders AS o 
+LEFT JOIN partners AS p ON o.rest_id = p.rest_id AND o.city_id = p.city_id
+GROUP BY 1, 2, 3
+ORDER BY LTV DESC
+LIMIT 3
+
+-- 5. Расчёт LTV ресторанов — самые популярные блюда
+
+-- Рассчитываем величину комиссии с каждого заказа, отбираем заказы по дате и городу
+WITH orders AS (
+    SELECT 
+        analytics_events.rest_id,
+        analytics_events.city_id,
+        analytics_events.object_id,
+        revenue * commission AS commission_revenue
+    FROM analytics_events
+    JOIN cities ON analytics_events.city_id = cities.city_id
+    WHERE revenue IS NOT NULL
+        AND log_date BETWEEN '2021-05-01' AND '2021-06-30'
+        AND city_name = 'Саранск'
+), 
+
+-- Рассчитываем два ресторана с наибольшим LTV 
+top_ltv_restaurants AS (
+    SELECT 
+        orders.rest_id,
+        chain,
+        type,
+        ROUND(SUM(commission_revenue)::numeric, 2) AS LTV
+    FROM orders
+    JOIN partners ON orders.rest_id = partners.rest_id AND orders.city_id = partners.city_id
+    GROUP BY 1, 2, 3
+    ORDER BY LTV DESC
+    LIMIT 2
+)
+
+SELECT 
+    t.chain AS "Название сети",
+    d.name AS "Название блюда",
+    d.spicy,
+    d.fish,
+    d.meat,
+    ROUND(SUM(o.commission_revenue)::numeric, 2) AS LTV
+FROM orders AS o
+JOIN top_ltv_restaurants AS t ON o.rest_id = t.rest_id
+JOIN dishes AS d ON o.object_id = d.object_id AND t.rest_id = d.rest_id
+WHERE t.chain = 'Гурманское Наслаждение' OR t.chain = 'Гастрономический Шторм'
+GROUP BY t.chain, d.name, d.spicy, d.fish, d.meat, t.LTV
+ORDER BY LTV DESC
+LIMIT 5
+
+-- 6. Расчёт Retention Rate
+
+-- Рассчитываем новых пользователей по дате первого посещения продукта
+WITH new_users AS (
+    SELECT 
+        DISTINCT first_date,
+        user_id
+    FROM analytics_events
+    JOIN cities ON analytics_events.city_id = cities.city_id
+    WHERE first_date BETWEEN '2021-05-01' AND '2021-06-24'
+        AND city_name = 'Саранск'
+),
+-- Рассчитываем активных пользователей по дате события
+active_users AS (
+    SELECT
+        DISTINCT log_date,
+        user_id
+    FROM analytics_events
+    JOIN cities ON analytics_events.city_id = cities.city_id
+    WHERE log_date BETWEEN '2021-05-01' AND '2021-06-30'
+        AND city_name = 'Саранск'
+),
+daily_retention AS (
+    SELECT 
+        new_users.user_id,
+        first_date,
+        log_date::date - first_date::date AS day_since_install
+    FROM new_users
+    JOIN active_users ON new_users.user_id = active_users.user_id
+        AND log_date >= first_date
+)
+
+SELECT day_since_install,
+       COUNT(DISTINCT user_id) AS retained_users,
+       ROUND((1.0 * COUNT(DISTINCT user_id) / MAX(COUNT(DISTINCT user_id)) OVER (ORDER BY day_since_install))::numeric, 2) AS retention_rate
+FROM daily_retention
+WHERE day_since_install < 8
+GROUP BY day_since_install
+ORDER BY day_since_install;
+
+-- 7. Сравнение Retention Rate по месяцам
+
+-- Рассчитываем новых пользователей по дате первого посещения продукта
+WITH new_users AS (
+    SELECT 
+        DISTINCT first_date,
+        user_id
+    FROM analytics_events
+    JOIN cities ON analytics_events.city_id = cities.city_id
+    WHERE first_date BETWEEN '2021-05-01' AND '2021-06-24'
+        AND city_name = 'Саранск'
+),
+
+-- Рассчитываем активных пользователей по дате события
+active_users AS (
+    SELECT 
+        DISTINCT log_date,
+        user_id
+    FROM analytics_events
+    JOIN cities ON analytics_events.city_id = cities.city_id
+    WHERE log_date BETWEEN '2021-05-01' AND '2021-06-30'
+        AND city_name = 'Саранск'
+),
+
+-- Соединяем таблицы с новыми и активными пользователями
+daily_retention AS (
+    SELECT 
+        new_users.user_id,
+        first_date,
+        log_date::date - first_date::date AS day_since_install
+    FROM new_users
+    JOIN active_users ON new_users.user_id = active_users.user_id
+        AND log_date >= first_date
+)
+
+SELECT DISTINCT 
+    CAST(DATE_TRUNC('month', first_date) AS date) AS "Месяц",
+    day_since_install,
+    COUNT(DISTINCT user_id) AS retained_users,
+    ROUND((1.0 * COUNT(DISTINCT user_id) / MAX(COUNT(DISTINCT user_id)) OVER (PARTITION BY CAST(DATE_TRUNC('month', first_date) AS date) ORDER BY day_since_install))::numeric, 2) AS retention_rate
+FROM daily_retention
+WHERE day_since_install < 8
+GROUP BY "Месяц", day_since_install
+ORDER BY "Месяц", day_since_install;
