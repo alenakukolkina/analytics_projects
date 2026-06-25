@@ -12,6 +12,8 @@
 - Анализ коммерческих помещений: плотность конкурентов, средние рейтинг и отзывность, отсутствующие кухни, близость к метро.
 - Агрегация по районам и выявление свободных ниш через матрицу «район × кухня».
 - Подготовка итоговых данных для визуализации в BI‑системе (Yandex DataLens).
+- 
+Дашборд для самостоятельного исследования доступен в Yandex DataLens: [ссылка на дашборд](https://datalens.yandex/3n8jlk8s8hpom?_no_controls=1&tab=64&_lang=ru&_theme=dark)
 
 **Стек технологий:**
 - Python 3, pandas, numpy – обработка и анализ данных.
@@ -49,8 +51,6 @@
 
 #### Рынок недвижимости
 - ~90% предложений — аренда, оптимальная площадь 80–150 м². Стоимость сильно зависит от близости к метро и конкурентного окружения.
-
-Дашборд для самостоятельного исследования доступен в Yandex DataLens: [ссылка на дашборд](https://datalens.yandex/3n8jlk8s8hpom?_no_controls=1&tab=64&_lang=ru&_theme=dark)
 
 ### Теги (Topics)
 python, pandas, numpy, geopandas, osmnx, pyrosm, matplotlib, seaborn, scikit-learn, data-analysis, geospatial-analysis, openstreetmap, datalens, market-research
